@@ -9,9 +9,9 @@ edition = "2018"
 approx = "0.5.0"
 conv = "0.3.3"
 matrixcompare = { version = "0.3.0", features = [ "proptest-support" ]}
-# nalgebra = { version = "0.29.0", features = ["std", "alloc", "proptest-support", "compare"]}
+nalgebra = { version = "0.29.0", features = ["std", "alloc", "proptest-support", "compare"]}
 # nalgebra = { git = "https://github.com/dimforge/nalgebra", branch = "dev", features = ["std", "alloc", "proptest-support", "compare"]}
-nalgebra = { path = "../nalgebra", features = ["std", "alloc", "proptest-support", "compare"]}
+# nalgebra = { path = "../nalgebra", features = ["std", "alloc", "proptest-support", "compare"]}
 ndarray-linalg = "0.14.1"
 ndarray-stats = "0.5.0"
 proptest = "1.0.0"
