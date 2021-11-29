@@ -1,6 +1,8 @@
 extern crate nalgebra as na;
 extern crate blas_src;
 
+use std::collections::HashMap;
+
 type DMatrixF = na::DMatrix<f64>;
 type DVectorF = na::DVector<f64>;
 
@@ -61,12 +63,101 @@ impl VanDerMarweSigmaPoints {
 
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
 
-    extern crate ndarray as nd;
-
     use matrixcompare::{assert_matrix_eq};
+
+    use rand::prelude::*;
+    use rand_distr::{StandardNormal};
+
+    #[derive(Debug)]
+    struct RadarStation {
+        position: na::Matrix1x2<f64>,
+        range_std: f64,
+        elevation_angle_std: f64
+    }
+
+    impl RadarStation {
+        fn new(pose: &na::Matrix1x2<f64>,
+               range_std: f64, elevation_angle_std: f64) -> RadarStation{
+            RadarStation {
+                position: pose.clone_owned(),
+                range_std: range_std,
+                elevation_angle_std: elevation_angle_std
+
+            }
+        }
+
+        fn read_aircraft_position(
+            &self, aircraft_position: &na::Matrix1x2<f64>) -> (f64, f64) {
+            let diff = aircraft_position - self.position;
+            let range = diff.norm() as f64;
+            let elevation = diff[(0, 1)].atan2(diff[(0, 0)]);
+            (range, elevation)
+        }
+
+        fn read_with_noise(&self, aircraft_position: &na::Matrix1x2<f64>) -> (f64, f64) {
+            let (range, bearing) = self.read_aircraft_position(aircraft_position);
+            let range_noised: f64 = range + rand::thread_rng().sample::<f64, _>(StandardNormal) * self.range_std;
+            let bearing_noised = bearing + rand::thread_rng().sample::<f64, _>(StandardNormal) * self.elevation_angle_std;
+            (range_noised, bearing_noised)
+        }
+    }
+
+    #[derive(Debug)]
+    struct AirCraftSim {
+        position: na::Matrix1x2<f64>,
+        velocity: na::Matrix1x2<f64>,
+        velocity_std: f64
+    }
+
+    impl AirCraftSim {
+        fn new(position: &na::Matrix1x2<f64>, velocity: &na::Matrix1x2<f64>, velocity_std: f64) -> AirCraftSim {
+            AirCraftSim{
+                position: position.clone_owned(),
+                velocity: velocity.clone_owned(),
+                velocity_std: velocity_std
+            }
+        }
+
+        fn update(&mut self, dt: f64) -> na::Matrix1x2<f64> {
+            let dx = (self.velocity * dt).add_scalar(
+                (rand::thread_rng().sample::<f64, _>(StandardNormal) * self.velocity_std) * dt);
+            self.position += dx;
+            self.position
+        }
+    }
+
+    fn fx(x: &DMatrixF, dt: f64) -> DMatrixF {
+        let mut F = na::DMatrix::identity(3, 3);
+        F[(0, 1)] = dt;
+        F * x
+    }
+
+    fn hx(x: &DMatrixF, init_params: &HashMap<&str, DMatrixF>) -> DMatrixF {
+        let dx = x[(0, 0)] - init_params["radar_pose"][(0, 0)];
+        let dy = x[(0, 2)] - init_params["radar_pose"][(0, 1)];
+        let slant_range = (dx.powi(2) + dy.powi(2)).sqrt();
+        let elevation_angle = dy.atan2(dx);
+        na::DMatrix::from_vec(1, 2, vec![slant_range, elevation_angle])
+    }
+
+    #[test]
+    fn ukf_test() {
+        let x = na::DMatrix::from_vec(1, 2, vec![1., 2.]).transpose();
+        let P = na::DMatrix::from_vec(2, 2, vec![1., 1.1,
+                                                 1.1, 3.]);
+        let x_size = x.len();
+        let alpha = 1e-1;
+        let beta = 2.;
+        let kappa = -1.;
+        let sigmas = VanDerMarweSigmaPoints::new(x_size, alpha, beta, kappa);
+
+    }
+
+
 
     #[test]
     #[allow(non_snake_case)]
@@ -100,15 +191,5 @@ mod tests {
         assert_matrix_eq!(&sigmas.W_c, &expected_W_c, comp = abs, tol=1e-8);
         assert_matrix_eq!(&sigmas.W_m, &expected_W_m, comp = abs, tol=1e-8);
 
-    }
-
-    #[test]
-    fn ndarray_matrix_test() {
-        let a = nd::Array::range(0.0, 9.0, 1.0).into_shape((3, 3)).unwrap();
-        let b = a.t();
-        let res = nd::Array::from_shape_vec((3, 3), vec![5.,  14.,  23.,
-                                                         14.,  50.,  86.,
-                                                         23.,  86., 149.]).unwrap();
-        assert!(res.abs_diff_eq(&a.dot(&b), 1e-12));
     }
 }

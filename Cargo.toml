@@ -19,3 +19,5 @@ proptest = "1.0.0"
 ndarray = { version = "0.15.3 ", features = ["blas", "std", "approx"] }
 blas-src = { version = "0.8", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
+rand = "0.8.4"
+rand_distr = "0.4.2"
