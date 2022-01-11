@@ -61,11 +61,42 @@ impl VanDerMarweSigmaPoints {
 }
 
 type ProcessFunctT = dyn Fn(&DMatrixF, f64) -> DMatrixF;
-type MeasurementFunctT = dyn Fn(&DMatrixF, &HashMap<&str, DMatrixF>) -> DMatrixF;
+type MeasurementFunctT = dyn Fn(&DMatrixF, &HashMap<String, DMatrixF>) -> DMatrixF;
 
 struct UKF {
+
+    x: DMatrixF,  // state
+    P: DMatrixF,  // state uncertainty
+    dt: f64,
+
+    Q: DMatrixF,  // process noise
+
+    sigma_points: VanDerMarweSigmaPoints,
+
     process_func: Box<ProcessFunctT>,
     measurement_func: Box<MeasurementFunctT>,
+    additional_params: HashMap<String, DMatrixF>,
+}
+
+impl UKF {
+
+    // fn new() -> UKF {
+    // }
+
+    #[allow(non_snake_case)]
+    fn predict_and_update(&mut self, z: &DMatrixF, R: &DMatrixF) {
+        let chi = self.sigma_points.calculate(&self.x, &self.P);
+        let gamma = (self.process_func)(&chi, self.dt);
+        let (x_prior, P_prior) = unscented_transform(&gamma, &self.sigma_points.W_m, &self.sigma_points.W_c, &self.Q);
+
+        let Z = (self.measurement_func)(&gamma, &self.additional_params);
+        let (x_z, P_z) = unscented_transform(&Z, &self.sigma_points.W_m, &self.sigma_points.W_c, &R);
+        let y = z - x_z.clone();
+        let P_xz = na::DMatrix::from_rows(&[(self.sigma_points.W_c.clone() * (gamma - x_prior.clone()) * (Z - x_z).transpose()).row_sum()]);
+        let K = P_xz.clone() * P_z.try_inverse().unwrap();
+        self.x = x_prior + K.clone() * y;
+        self.P = P_prior - K.clone() * P_xz * K.transpose();
+    }
 }
 
 #[allow(non_snake_case)]

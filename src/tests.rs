@@ -99,9 +99,6 @@ fn ukf_test() {
     let radar_pose = na::Matrix1x2::new(0., 0.);
     let init_params = HashMap::from([("radar_pose", &radar_pose)]);
     let radar_sim = RadarStation::new(&radar_pose, range_std, elevation_angle_std);
-
-
-
 }
 
 #[test]
