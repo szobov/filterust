@@ -7,13 +7,13 @@ use rand_distr::StandardNormal;
 
 #[derive(Debug)]
 struct RadarStation {
-    position: na::Matrix1x2<f64>,
+    position: DMatrixF,
     range_std: f64,
     elevation_angle_std: f64,
 }
 
 impl RadarStation {
-    fn new(pose: &na::Matrix1x2<f64>, range_std: f64, elevation_angle_std: f64) -> RadarStation {
+    fn new(pose: &DMatrixF, range_std: f64, elevation_angle_std: f64) -> RadarStation {
         RadarStation {
             position: pose.clone_owned(),
             range_std: range_std,
@@ -21,14 +21,14 @@ impl RadarStation {
         }
     }
 
-    fn read_aircraft_position(&self, aircraft_position: &na::Matrix1x2<f64>) -> (f64, f64) {
-        let diff = aircraft_position - self.position;
+    fn read_aircraft_position(&self, aircraft_position: &DMatrixF) -> (f64, f64) {
+        let diff = aircraft_position - self.position.clone();
         let range = diff.norm() as f64;
         let elevation = diff[(0, 1)].atan2(diff[(0, 0)]);
         (range, elevation)
     }
 
-    fn read_with_noise(&self, aircraft_position: &na::Matrix1x2<f64>) -> (f64, f64) {
+    fn read_with_noise(&self, aircraft_position: &DMatrixF) -> (f64, f64) {
         let (range, bearing) = self.read_aircraft_position(aircraft_position);
         let range_noised: f64 =
             range + rand::thread_rng().sample::<f64, _>(StandardNormal) * self.range_std;
@@ -40,15 +40,15 @@ impl RadarStation {
 
 #[derive(Debug)]
 struct AirCraftSim {
-    position: na::Matrix1x2<f64>,
-    velocity: na::Matrix1x2<f64>,
+    position: DMatrixF,
+    velocity: DMatrixF,
     velocity_std: f64,
 }
 
 impl AirCraftSim {
     fn new(
-        position: &na::Matrix1x2<f64>,
-        velocity: &na::Matrix1x2<f64>,
+        position: &DMatrixF,
+        velocity: &DMatrixF,
         velocity_std: f64,
     ) -> AirCraftSim {
         AirCraftSim {
@@ -58,12 +58,12 @@ impl AirCraftSim {
         }
     }
 
-    fn update(&mut self, dt: f64) -> na::Matrix1x2<f64> {
-        let dx = (self.velocity * dt).add_scalar(
+    fn update(&mut self, dt: f64) -> DMatrixF {
+        let dx = (self.velocity.clone() * dt).add_scalar(
             (rand::thread_rng().sample::<f64, _>(StandardNormal) * self.velocity_std) * dt,
         );
         self.position += dx;
-        self.position
+        self.position.clone()
     }
 }
 
@@ -73,7 +73,7 @@ fn fx(x: &DMatrixF, dt: f64) -> DMatrixF {
     F * x
 }
 
-fn hx(x: &DMatrixF, init_params: &HashMap<&str, &na::Matrix1x2<f64>>) -> DMatrixF {
+fn hx(x: &DMatrixF, init_params: &HashMap<String, DMatrixF>) -> DMatrixF {
     let dx = x[(0, 0)] - init_params["radar_pose"][(0, 0)];
     let dy = x[(0, 2)] - init_params["radar_pose"][(0, 1)];
     let slant_range = (dx.powi(2) + dy.powi(2)).sqrt();
@@ -94,11 +94,16 @@ fn ukf_test() {
     let dt = 3.;
     let range_std = 5.;
     let elevation_angle_std = 0.5_f64.to_radians();
-    let aircraft_sim = AirCraftSim::new(&na::Matrix1x2::new(0., 1000.), &na::Matrix1x2::new(100., 0.), 0.02);
+    let aircraft_sim = AirCraftSim::new(&DMatrixF::from_vec(1, 2, vec![0., 1000.]),
+                                        &DMatrixF::from_vec(1, 2, vec![100., 0.]), 0.02);
 
-    let radar_pose = na::Matrix1x2::new(0., 0.);
-    let init_params = HashMap::from([("radar_pose", &radar_pose)]);
+    let radar_pose = na::DMatrix::from_vec(1, 2, vec![0., 0.]);
+    let init_params = HashMap::from([("radar_pose".to_string(), radar_pose.clone())]);
     let radar_sim = RadarStation::new(&radar_pose, range_std, elevation_angle_std);
+
+    let Q = DMatrixF::identity(2, 2);
+
+    let ukf = UKF::new(&x, &P, dt, &Q, sigmas, Box::new(fx), Box::new(hx), init_params);
 }
 
 #[test]

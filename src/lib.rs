@@ -78,12 +78,24 @@ struct UKF {
     additional_params: HashMap<String, DMatrixF>,
 }
 
+#[allow(non_snake_case)]
 impl UKF {
 
-    // fn new() -> UKF {
-    // }
+    fn new(x_init: &DMatrixF, P_init: &DMatrixF, dt: f64, Q: &DMatrixF, sigma_points: VanDerMarweSigmaPoints,
+           process_func: Box<ProcessFunctT>, measurement_func: Box<MeasurementFunctT>, additional_params: HashMap<String, DMatrixF>) -> UKF {
 
-    #[allow(non_snake_case)]
+        UKF {
+            x: x_init.clone(),
+            P: P_init.clone(),
+            dt: dt,
+            Q: Q.clone(),
+            sigma_points: sigma_points,
+            process_func: process_func,
+            measurement_func: measurement_func,
+            additional_params: additional_params
+        }
+    }
+
     fn predict_and_update(&mut self, z: &DMatrixF, R: &DMatrixF) {
         let chi = self.sigma_points.calculate(&self.x, &self.P);
         let gamma = (self.process_func)(&chi, self.dt);
